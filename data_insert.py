@@ -3,10 +3,16 @@ import pandas as pd
 import os
 import sys
 from pandas.tseries.offsets import MonthEnd
+from dotenv import load_dotenv
+load_dotenv()
 
 class Media:
     def __init__(self):
-        self.engine = create_engine("mysql+pymysql://root:Shri%400177@localhost:3306/media_publishing")
+        db_user = os.getenv("USER")
+        db_password = os.getenv("PASSWORD")
+        db_port = os.getenv("PORT")
+        db_host = os.getenv("HOST")
+        self.engine = create_engine(f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/media_publishing")
 
     def __del__(self):
         del self.engine
