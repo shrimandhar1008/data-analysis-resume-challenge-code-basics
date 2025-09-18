@@ -6,11 +6,49 @@ SELECT * FROM fact_ad_revenue;
 SELECT * FROM fact_city_readiness;
 SELECT * FROM fact_digital_pilot;
 SELECT * FROM fact_print_sales order by Month;
+-- ------------------------------------------------------------------
+-- Business Request – 6 : 2021 Readiness vs Pilot Engagement Outlier
+-- ------------------------------------------------------------------
+
 
 -- ------------------------------------------------------------------
 -- Business Request – 5: Consistent Multi-Year Decline (2019→2024)  
 -- ------------------------------------------------------------------
-
+WITH print_data AS (SELECT  d.city, p.edition_id, p.city_id, DATE_FORMAT(p.Month,"%Y") AS year, SUM(p.net_circulation) AS yearly_net_circulation
+FROM fact_print_sales p LEFT JOIN dim_city d ON p.city_id = d.city_id GROUP BY p.edition_id, p.city_id,d.city,year ORDER BY d.city,year ASC),
+revenue_data AS (SELECT edition_id, DATE_FORMAT(quarter, "%Y") as year, SUM(ad_revenue) AS yearly_revenue
+FROM fact_ad_revenue GROUP BY edition_id, year),
+combine AS (SELECT p.city, p.year, p.yearly_net_circulation, r.yearly_revenue
+FROM print_data p LEFT JOIN revenue_data r ON p.edition_id = r.edition_id AND p.year = r.year),
+lag_data AS(
+SELECT 
+    city,
+    year,
+    yearly_net_circulation,
+    LAG(yearly_net_circulation,1) OVER(PARTITION BY city) AS prev_circulation,
+    yearly_revenue,
+    LAG(yearly_revenue,1) OVER(PARTITION BY city) AS prev_revenue
+FROM combine),
+decline AS (SELECT *,
+	CASE 
+        WHEN prev_circulation > yearly_net_circulation THEN 'yes'
+        WHEN prev_circulation IS NULL THEN NULL
+        ELSE 'no'
+    END AS is_declining_print,
+    CASE 
+        WHEN prev_revenue > yearly_revenue THEN 'yes'
+        WHEN prev_revenue IS NULL THEN NULL
+        ELSE 'no'
+    END AS is_declining_revenue
+FROM lag_Data)
+SELECT city, year, yearly_net_circulation, yearly_revenue, is_declining_print, is_declining_revenue,
+	CASE 
+        WHEN is_declining_print = 'yes' AND is_declining_revenue = 'yes' THEN 'yes'
+        WHEN is_declining_print IS NULL AND is_declining_revenue IS NULL THEN NULL
+        ELSE 'no'
+    END AS is_declining_both
+    FROM decline ORDER BY city, year;
+    
 -- ------------------------------------------------------------------
 -- Business Request – 4 : Internet Readiness Growth (2021) 
 -- ------------------------------------------------------------------
