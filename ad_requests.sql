@@ -6,10 +6,54 @@ SELECT * FROM fact_ad_revenue;
 SELECT * FROM fact_city_readiness;
 SELECT * FROM fact_digital_pilot;
 SELECT * FROM fact_print_sales order by Month;
+
 -- ------------------------------------------------------------------
 -- Business Request – 6 : 2021 Readiness vs Pilot Engagement Outlier
 -- ------------------------------------------------------------------
-
+WITH readiness AS (
+SELECT  r.city_id, DATE_FORMAT(r.quarter, "%Y") AS year,
+AVG((r.literacy_rate + r.smartphone_penetration + r.internet_penetration) / 3) AS readiness_score_2021
+FROM fact_city_readiness r
+GROUP BY year, r.city_id
+HAVING year= 2021
+),
+engagement AS (
+    SELECT 
+        c.city_id,
+        c.city,
+        DATE_FORMAT(p.launch_month,"%Y") AS year,
+        -- choose one engagement metric here (example: downloads_or_accesses)
+        AVG(p.downloads_or_accesses) AS engagement_metric_2021
+    FROM fact_digital_pilot p
+    JOIN dim_city c ON c.city_id = p.city_id   -- if platform maps to city differently, adjust accordingly
+    -- WHERE year = 2021
+    GROUP BY year,c.city_id,c.city
+    HAVING year= 2021
+),
+ranked AS (
+    SELECT 
+        d.city,
+        r.readiness_score_2021,
+        e.engagement_metric_2021,
+        RANK() OVER (ORDER BY r.readiness_score_2021 DESC) AS readiness_rank_desc,
+        RANK() OVER (ORDER BY e.engagement_metric_2021 ASC) AS engagement_rank_asc
+    FROM readiness r
+    JOIN engagement e ON r.city_id = e.city_id
+    JOIN dim_city d ON r.city_id = d.city_id
+)
+SELECT 
+    city AS city_name,
+    readiness_score_2021,
+    engagement_metric_2021,
+    readiness_rank_desc,
+    engagement_rank_asc,
+    CASE 
+        WHEN engagement_rank_asc <= 3 
+             AND readiness_rank_desc = 1 THEN 'Yes'
+        ELSE 'No'
+    END AS is_outlier
+FROM ranked
+ORDER BY readiness_rank_desc, engagement_rank_asc;
 
 -- ------------------------------------------------------------------
 -- Business Request – 5: Consistent Multi-Year Decline (2019→2024)  
